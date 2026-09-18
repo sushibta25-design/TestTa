@@ -37,7 +37,7 @@ static void DumpHostEvent(UIView *h, NSString *ev){
    NSStringFromClass(p.class),(unsigned long)p.subviews.count,NSStringFromClass(l.class),cid,gW.hidden,gW.alpha);
 }
 %hook _UIContextLayerHostView
--(void)didMoveToWindow{ %orig; DumpHostEvent((UIView*)self,((UIView*)self).window?@"ATTACH":@"DETACH"); }
--(void)didMoveToSuperview{ %orig; DumpHostEvent((UIView*)self,((UIView*)self).superview?@"SUPER+":@"SUPER-"); }
--(void)setFrame:(CGRect)f{ CGRect old=((UIView*)self).frame; %orig; if(!CGSizeEqualToSize(old.size,f.size)&&f.size.width>100)DumpHostEvent((UIView*)self,@"RESIZE"); }
+-(void)didMoveToWindow {\n %orig;\n UIView *v=(UIView *)self;\n NSString *ev=(v.window != nil) ? @"ATTACH" : @"DETACH";\n DumpHostEvent(v,ev);\n}
+-(void)didMoveToSuperview {\n %orig;\n UIView *v=(UIView *)self;\n NSString *ev=(v.superview != nil) ? @"SUPER+" : @"SUPER-";\n DumpHostEvent(v,ev);\n}
+-(void)setFrame:(CGRect)f {\n UIView *v=(UIView *)self;\n CGRect old=v.frame;\n %orig;\n if(!CGSizeEqualToSize(old.size,f.size) && f.size.width>100) DumpHostEvent(v,@"RESIZE");\n}
 %end
