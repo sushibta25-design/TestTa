@@ -16,7 +16,7 @@
 
 static NSString*const P=@"/var/mobile/TestTaLab.txt";
 static TALabWindow*gW=nil;static UIView*gB=nil;static __weak UIWindowScene*gLast=nil;static BOOL gLoop=NO;static UIView*gHosted=nil;
-static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-4.1] %s\\n",m.UTF8String);fclose(x);}}
+static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-4.2] %s\\n",m.UTF8String);fclose(x);}}
 static BOOL CP(UIWindowScene*s){if(!s)return NO;NSString*r=s.session.role?:@"";if([r localizedCaseInsensitiveContainsString:@"CarPlay"])return YES;CGSize z=s.screen.bounds.size;return z.width>z.height&&z.width>=300&&z.height<=500;}
 static UIWindowScene*Find(void){UIWindowScene*best=nil;CGFloat score=-CGFLOAT_MAX;NSString*bid=nil;for(UIScene*r in UIApplication.sharedApplication.connectedScenes){if(![r isKindOfClass:UIWindowScene.class])continue;UIWindowScene*s=(UIWindowScene*)r;if(!CP(s))continue;CGSize z=s.screen.bounds.size;NSString*pid=s.session.persistentIdentifier?:@"";BOOL dash=[pid containsString:@"DBDashboard-Car"]||[pid containsString:@"DBDashboard"];CGFloat hi=-CGFLOAT_MAX;for(UIWindow*w in s.windows)if(w&&!w.hidden&&w.alpha>.01)hi=MAX(hi,w.windowLevel);if(hi==-CGFLOAT_MAX)hi=-10000;CGFloat q=(dash?1e9:0)+(hi>=UIWindowLevelAlert?1e8:0)+z.width*z.height+hi;BOOL tie=fabs(q-score)<.5&&(!bid||[pid compare:bid]==NSOrderedAscending);if(!best||q>score||tie){best=s;score=q;bid=pid;}}if(best!=gLast){gLast=best;if(best)L(@"SELECTED pid=%@ role=%@ size=%@",best.session.persistentIdentifier,best.session.role,NSStringFromCGSize(best.screen.bounds.size));}return best;}
 static UIView*Bubble(CGFloat s){UIView*v=[[UIView alloc]initWithFrame:CGRectMake(8,8,s,s)];v.backgroundColor=UIColor.systemYellowColor;v.layer.cornerRadius=s/2;v.layer.borderWidth=7;v.layer.borderColor=UIColor.systemGreenColor.CGColor;UILabel*l=[[UILabel alloc]initWithFrame:v.bounds];l.text=@"LAB";l.textAlignment=NSTextAlignmentCenter;l.font=[UIFont boldSystemFontOfSize:s*.25];l.textColor=UIColor.blackColor;[v addSubview:l];return v;}
@@ -54,13 +54,19 @@ static void Tick(void){UIWindowScene*s=Find();if(!s){dispatch_after(dispatch_tim
 
 
 
-// 4.1 SAFE: verify which process actually has DuoDash.dylib loaded.
-// No hosting hooks.
-static void ImageSurvey(void){
- uint32_t n=_dyld_image_count();BOOL found=NO;
- for(uint32_t i=0;i<n;i++){const char*p=_dyld_get_image_name(i);if(p&&strstr(p,"DuoDash.dylib")){found=YES;L(@"4.1 DUO LOADED image=%s header=%p",p,_dyld_get_image_header(i));}}
- L(@"4.1 IMAGE SURVEY process=%@ found=%d images=%u",NSProcessInfo.processInfo.processName,found,n);
+
+
+// 4.2 SAFE process-specific survey. 4.1 proved DuoDash.dylib is loaded in BOTH
+// CarPlay and SpringBoard. Survey image-owned CNAB classes in each process, no host hooks.
+static void SurveyDuoClasses(void){
+ uint32_t n=_dyld_image_count();const char*path=NULL;
+ for(uint32_t i=0;i<n;i++){const char*p=_dyld_get_image_name(i);if(p&&strstr(p,"DuoDash.dylib")){path=p;break;}}
+ if(!path){L(@"4.2 NO DUO IMAGE process=%@",NSProcessInfo.processInfo.processName);return;}
+ unsigned nc=0;const char**names=objc_copyClassNamesForImage(path,&nc);
+ L(@"4.2 SURVEY process=%@ classes=%u",NSProcessInfo.processInfo.processName,nc);
+ for(unsigned i=0;i<nc;i++){Class k=objc_getClass(names[i]);NSString*cn=NSStringFromClass(k);unsigned mc=0;Method*ms=class_copyMethodList(k,&mc);NSMutableArray*a=[NSMutableArray array];
+  for(unsigned j=0;j<mc;j++){NSString*s=NSStringFromSelector(method_getName(ms[j]));if([s localizedCaseInsensitiveContainsString:@"host"]||[s localizedCaseInsensitiveContainsString:@"scene"]||[s localizedCaseInsensitiveContainsString:@"context"]||[s localizedCaseInsensitiveContainsString:@"window"]||[s localizedCaseInsensitiveContainsString:@"display"]||[s localizedCaseInsensitiveContainsString:@"slot"])[a addObject:s];}
+  if(a.count)L(@"4.2 %@ methods=%@",cn,a);free(ms);
+ }free(names);L(@"4.2 END process=%@",NSProcessInfo.processInfo.processName);
 }
-%ctor { @autoreleasepool {
- dispatch_after(dispatch_time(DISPATCH_TIME_NOW,4*NSEC_PER_SEC),dispatch_get_main_queue(),^{ImageSurvey();});
-}}
+%ctor { @autoreleasepool { dispatch_after(dispatch_time(DISPATCH_TIME_NOW,5*NSEC_PER_SEC),dispatch_get_main_queue(),^{SurveyDuoClasses();}); } }
