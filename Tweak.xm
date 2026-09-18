@@ -10,7 +10,8 @@
 
 static NSString*const P=@"/var/mobile/TestTaLab.txt";
 static TALabWindow*gW=nil;static UIView*gB=nil;static __weak UIWindowScene*gLast=nil;static BOOL gLoop=NO;static UIView*gHosted=nil;
-static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-2.1] %s\n",m.UTF8String);fclose(x);}}
+static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-2.1] %s
+",m.UTF8String);fclose(x);}}
 static BOOL CP(UIWindowScene*s){if(!s)return NO;NSString*r=s.session.role?:@"";if([r localizedCaseInsensitiveContainsString:@"CarPlay"])return YES;CGSize z=s.screen.bounds.size;return z.width>z.height&&z.width>=300&&z.height<=500;}
 static UIWindowScene*Find(void){UIWindowScene*best=nil;CGFloat score=-CGFLOAT_MAX;NSString*bid=nil;for(UIScene*r in UIApplication.sharedApplication.connectedScenes){if(![r isKindOfClass:UIWindowScene.class])continue;UIWindowScene*s=(UIWindowScene*)r;if(!CP(s))continue;CGSize z=s.screen.bounds.size;NSString*pid=s.session.persistentIdentifier?:@"";BOOL dash=[pid containsString:@"DBDashboard-Car"]||[pid containsString:@"DBDashboard"];CGFloat hi=-CGFLOAT_MAX;for(UIWindow*w in s.windows)if(w&&!w.hidden&&w.alpha>.01)hi=MAX(hi,w.windowLevel);if(hi==-CGFLOAT_MAX)hi=-10000;CGFloat q=(dash?1e9:0)+(hi>=UIWindowLevelAlert?1e8:0)+z.width*z.height+hi;BOOL tie=fabs(q-score)<.5&&(!bid||[pid compare:bid]==NSOrderedAscending);if(!best||q>score||tie){best=s;score=q;bid=pid;}}if(best!=gLast){gLast=best;if(best)L(@"SELECTED pid=%@ role=%@ size=%@",best.session.persistentIdentifier,best.session.role,NSStringFromCGSize(best.screen.bounds.size));}return best;}
 static UIView*Bubble(CGFloat s){UIView*v=[[UIView alloc]initWithFrame:CGRectMake(8,8,s,s)];v.backgroundColor=UIColor.systemYellowColor;v.layer.cornerRadius=s/2;v.layer.borderWidth=7;v.layer.borderColor=UIColor.systemGreenColor.CGColor;UILabel*l=[[UILabel alloc]initWithFrame:v.bounds];l.text=@"LAB";l.textAlignment=NSTextAlignmentCenter;l.font=[UIFont boldSystemFontOfSize:s*.25];l.textColor=UIColor.blackColor;[v addSubview:l];return v;}
@@ -37,7 +38,22 @@ static void DumpHostEvent(UIView *h, NSString *ev){
    NSStringFromClass(p.class),(unsigned long)p.subviews.count,NSStringFromClass(l.class),cid,gW.hidden,gW.alpha);
 }
 %hook _UIContextLayerHostView
--(void)didMoveToWindow {\n %orig;\n UIView *v=(UIView *)self;\n NSString *ev=(v.window != nil) ? @"ATTACH" : @"DETACH";\n DumpHostEvent(v,ev);\n}
--(void)didMoveToSuperview {\n %orig;\n UIView *v=(UIView *)self;\n NSString *ev=(v.superview != nil) ? @"SUPER+" : @"SUPER-";\n DumpHostEvent(v,ev);\n}
--(void)setFrame:(CGRect)f {\n UIView *v=(UIView *)self;\n CGRect old=v.frame;\n %orig;\n if(!CGSizeEqualToSize(old.size,f.size) && f.size.width>100) DumpHostEvent(v,@"RESIZE");\n}
+-(void)didMoveToWindow {
+ %orig;
+ UIView *v=(UIView *)self;
+ NSString *ev=(v.window != nil) ? @"ATTACH" : @"DETACH";
+ DumpHostEvent(v,ev);
+}
+-(void)didMoveToSuperview {
+ %orig;
+ UIView *v=(UIView *)self;
+ NSString *ev=(v.superview != nil) ? @"SUPER+" : @"SUPER-";
+ DumpHostEvent(v,ev);
+}
+-(void)setFrame:(CGRect)f {
+ UIView *v=(UIView *)self;
+ CGRect old=v.frame;
+ %orig;
+ if(!CGSizeEqualToSize(old.size,f.size) && f.size.width>100) DumpHostEvent(v,@"RESIZE");
+}
 %end
