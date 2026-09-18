@@ -11,7 +11,7 @@
 
 static NSString*const P=@"/var/mobile/TestTaLab.txt";
 static TALabWindow*gW=nil;static UIView*gB=nil;static __weak UIWindowScene*gLast=nil;static BOOL gLoop=NO;static UIView*gHosted=nil;
-static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-3.1] %s\\n",m.UTF8String);fclose(x);}}
+static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-3.2] %s\\n",m.UTF8String);fclose(x);}}
 static BOOL CP(UIWindowScene*s){if(!s)return NO;NSString*r=s.session.role?:@"";if([r localizedCaseInsensitiveContainsString:@"CarPlay"])return YES;CGSize z=s.screen.bounds.size;return z.width>z.height&&z.width>=300&&z.height<=500;}
 static UIWindowScene*Find(void){UIWindowScene*best=nil;CGFloat score=-CGFLOAT_MAX;NSString*bid=nil;for(UIScene*r in UIApplication.sharedApplication.connectedScenes){if(![r isKindOfClass:UIWindowScene.class])continue;UIWindowScene*s=(UIWindowScene*)r;if(!CP(s))continue;CGSize z=s.screen.bounds.size;NSString*pid=s.session.persistentIdentifier?:@"";BOOL dash=[pid containsString:@"DBDashboard-Car"]||[pid containsString:@"DBDashboard"];CGFloat hi=-CGFLOAT_MAX;for(UIWindow*w in s.windows)if(w&&!w.hidden&&w.alpha>.01)hi=MAX(hi,w.windowLevel);if(hi==-CGFLOAT_MAX)hi=-10000;CGFloat q=(dash?1e9:0)+(hi>=UIWindowLevelAlert?1e8:0)+z.width*z.height+hi;BOOL tie=fabs(q-score)<.5&&(!bid||[pid compare:bid]==NSOrderedAscending);if(!best||q>score||tie){best=s;score=q;bid=pid;}}if(best!=gLast){gLast=best;if(best)L(@"SELECTED pid=%@ role=%@ size=%@",best.session.persistentIdentifier,best.session.role,NSStringFromCGSize(best.screen.bounds.size));}return best;}
 static UIView*Bubble(CGFloat s){UIView*v=[[UIView alloc]initWithFrame:CGRectMake(8,8,s,s)];v.backgroundColor=UIColor.systemYellowColor;v.layer.cornerRadius=s/2;v.layer.borderWidth=7;v.layer.borderColor=UIColor.systemGreenColor.CGColor;UILabel*l=[[UILabel alloc]initWithFrame:v.bounds];l.text=@"LAB";l.textAlignment=NSTextAlignmentCenter;l.font=[UIFont boldSystemFontOfSize:s*.25];l.textColor=UIColor.blackColor;[v addSubview:l];return v;}
@@ -31,33 +31,44 @@ static void Tick(void){UIWindowScene*s=Find();if(!s){dispatch_after(dispatch_tim
 
 
 
-// 3.0 — new branch: inspect CarBridge/CNAB objects that publish hosted scenes.
-// READ ONLY. No window/context/z-order experiments.
-static BOOL TAHit(NSString *n){
- return [n localizedCaseInsensitiveContainsString:@"CNAB"] ||
-        [n localizedCaseInsensitiveContainsString:@"CarBridge"] ||
-        [n localizedCaseInsensitiveContainsString:@"HostUIApp"];
+
+
+// 3.2 — trace the actual CNAB hosting calls discovered by 3.1.
+// READ ONLY: no z-order/window/context experiment.
+static NSString *TAObj(id o){@try{return [o description];}@catch(__unused NSException*e){return @"<exception>";}}
+%hook CNABSpringBoardObserver
+-(void)hostSlots:(id)slots skipEvict:(BOOL)skip {
+ L(@"CNAB hostSlots skipEvict=%d self=%@ slots=%@",skip,TAObj(self),TAObj(slots));
+ %orig;
 }
-static void TAClassSurvey(void){ L(@"SURVEY BEGIN");
- int n=objc_getClassList(NULL,0); Class *cs=(Class *)malloc(sizeof(Class)*n); n=objc_getClassList(cs,n);
- for(int i=0;i<n;i++){
-  Class k=cs[i]; NSString *name=NSStringFromClass(k); if(!TAHit(name))continue;
-  unsigned mc=0; Method *ms=class_copyMethodList(k,&mc); NSMutableArray *hits=[NSMutableArray array];
-  for(unsigned j=0;j<mc;j++){NSString*s=NSStringFromSelector(method_getName(ms[j]));
-   if([s localizedCaseInsensitiveContainsString:@"scene"]||[s localizedCaseInsensitiveContainsString:@"host"]||
-      [s localizedCaseInsensitiveContainsString:@"context"]||[s localizedCaseInsensitiveContainsString:@"window"]||
-      [s localizedCaseInsensitiveContainsString:@"display"]||[s localizedCaseInsensitiveContainsString:@"app"])
-      [hits addObject:s];
-  } free(ms);
-  L(@"CBCLASS %@ methods=%@",name,hits);
- } free(cs); L(@"SURVEY END");
+-(void)hostSplitL:(id)left right:(id)right skipEvict:(BOOL)skip {
+ L(@"CNAB hostSplit left=%@ right=%@ skipEvict=%d self=%@",TAObj(left),TAObj(right),skip,TAObj(self));
+ %orig;
 }
+-(void)onHostRequest:(id)req {
+ L(@"CNAB onHostRequest req=%@ self=%@",TAObj(req),TAObj(self));
+ %orig;
+}
+-(void)onHostRequestSplit:(id)req {
+ L(@"CNAB onHostRequestSplit req=%@ self=%@",TAObj(req),TAObj(self));
+ %orig;
+}
+%end
+%hook CNABCarPlayObserver
+-(void)onHostState:(id)state {
+ L(@"CNAB onHostState state=%@ self=%@",TAObj(state),TAObj(self));
+ %orig;
+}
+%end
+%hook CNABHostUIAppResponder
+-(void)onUIAppRequest:(id)req {
+ L(@"CNAB onUIAppRequest req=%@ self=%@",TAObj(req),TAObj(self));
+ %orig;
+}
+%end
 %ctor {
  @autoreleasepool {
   NSString *b=NSBundle.mainBundle.bundleIdentifier?:@"";
-  L(@"3.0 LOAD bundle=%@ process=%@",b,NSProcessInfo.processInfo.processName);
-  if([b isEqualToString:@"com.apple.CarPlayApp"]){
-   dispatch_after(dispatch_time(DISPATCH_TIME_NOW,3*NSEC_PER_SEC),dispatch_get_main_queue(),^{ TAClassSurvey(); });
-  }
+  L(@"3.2 ACTIVE bundle=%@ process=%@",b,NSProcessInfo.processInfo.processName);
  }
 }
