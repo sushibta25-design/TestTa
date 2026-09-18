@@ -11,7 +11,7 @@
 
 static NSString*const P=@"/var/mobile/TestTaLab.txt";
 static TALabWindow*gW=nil;static UIView*gB=nil;static __weak UIWindowScene*gLast=nil;static BOOL gLoop=NO;static UIView*gHosted=nil;
-static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-3.3] %s\\n",m.UTF8String);fclose(x);}}
+static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-3.4] %s\\n",m.UTF8String);fclose(x);}}
 static BOOL CP(UIWindowScene*s){if(!s)return NO;NSString*r=s.session.role?:@"";if([r localizedCaseInsensitiveContainsString:@"CarPlay"])return YES;CGSize z=s.screen.bounds.size;return z.width>z.height&&z.width>=300&&z.height<=500;}
 static UIWindowScene*Find(void){UIWindowScene*best=nil;CGFloat score=-CGFLOAT_MAX;NSString*bid=nil;for(UIScene*r in UIApplication.sharedApplication.connectedScenes){if(![r isKindOfClass:UIWindowScene.class])continue;UIWindowScene*s=(UIWindowScene*)r;if(!CP(s))continue;CGSize z=s.screen.bounds.size;NSString*pid=s.session.persistentIdentifier?:@"";BOOL dash=[pid containsString:@"DBDashboard-Car"]||[pid containsString:@"DBDashboard"];CGFloat hi=-CGFLOAT_MAX;for(UIWindow*w in s.windows)if(w&&!w.hidden&&w.alpha>.01)hi=MAX(hi,w.windowLevel);if(hi==-CGFLOAT_MAX)hi=-10000;CGFloat q=(dash?1e9:0)+(hi>=UIWindowLevelAlert?1e8:0)+z.width*z.height+hi;BOOL tie=fabs(q-score)<.5&&(!bid||[pid compare:bid]==NSOrderedAscending);if(!best||q>score||tie){best=s;score=q;bid=pid;}}if(best!=gLast){gLast=best;if(best)L(@"SELECTED pid=%@ role=%@ size=%@",best.session.persistentIdentifier,best.session.role,NSStringFromCGSize(best.screen.bounds.size));}return best;}
 static UIView*Bubble(CGFloat s){UIView*v=[[UIView alloc]initWithFrame:CGRectMake(8,8,s,s)];v.backgroundColor=UIColor.systemYellowColor;v.layer.cornerRadius=s/2;v.layer.borderWidth=7;v.layer.borderColor=UIColor.systemGreenColor.CGColor;UILabel*l=[[UILabel alloc]initWithFrame:v.bounds];l.text=@"LAB";l.textAlignment=NSTextAlignmentCenter;l.font=[UIFont boldSystemFontOfSize:s*.25];l.textColor=UIColor.blackColor;[v addSubview:l];return v;}
@@ -35,32 +35,39 @@ static void Tick(void){UIWindowScene*s=Find();if(!s){dispatch_after(dispatch_tim
 
 
 
-// 3.3 — inspect live CNAB hosting objects immediately after hostSlots.
-// New branch only: object/ivar discovery, no old z-order techniques.
-static void DumpIvars(id o, NSString *tag){
- if(!o)return; Class k=[o class]; unsigned n=0; Ivar *iv=class_copyIvarList(k,&n);
- L(@"IVARS %@ class=%@ count=%u",tag,NSStringFromClass(k),n);
- for(unsigned i=0;i<n;i++){const char*nm=ivar_getName(iv[i]);const char*ty=ivar_getTypeEncoding(iv[i]);id v=nil;
-  if(ty && ty[0]=='@') @try{v=object_getIvar(o,iv[i]);}@catch(__unused NSException*e){}
-  L(@" IVAR %s type=%s value=%@",nm?:"?",ty?:"?",v);
- } free(iv);
+
+
+// 3.4 — inspect CNAB hosting implementation surface: superclass chain + method signatures.
+// 3.3 proved observer classes have zero own ivars, so do not repeat ivar probing.
+static void DumpClassChain(Class k, NSString *tag){
+ for(int depth=0;k && depth<8;depth++,k=class_getSuperclass(k)){
+  unsigned n=0; Method *ms=class_copyMethodList(k,&n);
+  L(@"CLASSCHAIN %@ depth=%d class=%@ methods=%u",tag,depth,NSStringFromClass(k),n);
+  for(unsigned i=0;i<n;i++){
+   SEL s=method_getName(ms[i]); NSString *name=NSStringFromSelector(s);
+   if([name localizedCaseInsensitiveContainsString:@"host"]||
+      [name localizedCaseInsensitiveContainsString:@"scene"]||
+      [name localizedCaseInsensitiveContainsString:@"slot"]||
+      [name localizedCaseInsensitiveContainsString:@"app"]||
+      [name localizedCaseInsensitiveContainsString:@"request"]||
+      [name localizedCaseInsensitiveContainsString:@"state"])
+     L(@" METHOD %@ types=%s imp=%p",name,method_getTypeEncoding(ms[i]),method_getImplementation(ms[i]));
+  }
+  free(ms);
+ }
 }
 %hook CNABSpringBoardObserver
 -(void)hostSlots:(id)slots skipEvict:(BOOL)skip {
- L(@"HOSTSLOTS BEGIN slots=%@ skip=%d",slots,skip);
- DumpIvars(self,@"SpringBoardObserver BEFORE");
+ static dispatch_once_t once; dispatch_once(&once,^{DumpClassChain([self class],@"SpringBoardObserver");});
+ L(@"3.4 hostSlots=%@ skip=%d",slots,skip);
  %orig;
- DumpIvars(self,@"SpringBoardObserver AFTER");
- L(@"HOSTSLOTS END");
 }
 %end
 %hook CNABCarPlayObserver
 -(void)onHostState:(id)state {
+ static dispatch_once_t once; dispatch_once(&once,^{DumpClassChain([self class],@"CarPlayObserver");});
+ L(@"3.4 hostState=%@",state);
  %orig;
- L(@"HOSTSTATE %@",state);
- DumpIvars(self,@"CarPlayObserver");
 }
 %end
-%ctor {
- @autoreleasepool { L(@"3.3 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); }
-}
+%ctor { @autoreleasepool { L(@"3.4 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); } }
