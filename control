@@ -1,8 +1,8 @@
 Package: com.talab.testta
 Name: TestTa
-Version: 1.0.0
+Version: 2.0.0
 Architecture: iphoneos-arm64
-Description: Clean standalone CarPlay bubble visibility baseline.
+Description: Clean CarPlay LAB overlay using proven multi-scene lifecycle.
 Maintainer: sushibta25-design
 Author: sushibta25-design
 Section: Tweaks
