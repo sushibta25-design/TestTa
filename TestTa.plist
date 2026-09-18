@@ -1,1 +1,10 @@
-{ Filter = { Bundles = ( "com.apple.CarPlayApp" ); }; }
+{
+    Filter = {
+        Executables = (
+            "CarPlay"
+        );
+        Bundles = (
+            "com.apple.CarPlayApp"
+        );
+    };
+}
