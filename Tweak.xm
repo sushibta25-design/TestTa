@@ -52,7 +52,7 @@ static void Tick(void){UIWindowScene*s=Find();if(!s){dispatch_after(dispatch_tim
 
 // 3.8 — trace what DuoDash hostSplit creates/calls, using runtime object delta.
 // Offsets are now known; avoid old overlay/z-order experiments.
-static NSSet *ClassNames(void){int n=objc_getClassList(NULL,0);Class*cs=malloc(sizeof(Class)*n);n=objc_getClassList(cs,n);NSMutableSet*s=[NSMutableSet set];for(int i=0;i<n;i++){NSString*x=NSStringFromClass(cs[i]);if(x)[s addObject:x];}free(cs);return s;}
+static NSSet *ClassNames(void){int n=objc_getClassList(NULL,0);Class *cs=(Class *)malloc(sizeof(Class)*n);n=objc_getClassList(cs,n);NSMutableSet*s=[NSMutableSet set];for(int i=0;i<n;i++){NSString*x=NSStringFromClass(cs[i]);if(x)[s addObject:x];}free(cs);return s;}
 %hook CNABSpringBoardObserver
 -(void)hostSplitL:(id)l right:(id)r skipEvict:(BOOL)skip {
  NSSet*before=ClassNames();L(@"3.8 SPLIT BEGIN L=%@ R=%@ skip=%d",l,r,skip);
