@@ -58,14 +58,14 @@ static void DumpClassChain(Class k, NSString *tag){
 }
 %hook CNABSpringBoardObserver
 -(void)hostSlots:(id)slots skipEvict:(BOOL)skip {
- static dispatch_once_t once; dispatch_once(&once,^{DumpClassChain([self class],@"SpringBoardObserver");});
+ static dispatch_once_t once; dispatch_once(&once,^{DumpClassChain(object_getClass((id)self),@"SpringBoardObserver");});
  L(@"3.4 hostSlots=%@ skip=%d",slots,skip);
  %orig;
 }
 %end
 %hook CNABCarPlayObserver
 -(void)onHostState:(id)state {
- static dispatch_once_t once; dispatch_once(&once,^{DumpClassChain([self class],@"CarPlayObserver");});
+ static dispatch_once_t once; dispatch_once(&once,^{DumpClassChain(object_getClass((id)self),@"CarPlayObserver");});
  L(@"3.4 hostState=%@",state);
  %orig;
 }
