@@ -1,10 +1,9 @@
 {
-    Filter = {
-        Executables = (
-            "CarPlay"
-        );
-        Bundles = (
-            "com.apple.CarPlayApp"
-        );
-    };
+ Filter = {
+   Bundles = (
+     "com.apple.springboard",
+     "com.apple.CarPlayApp"
+   );
+   Mode = "Any";
+ };
 }
