@@ -16,7 +16,7 @@
 
 static NSString*const P=@"/var/mobile/TestTaLab.txt";
 static TALabWindow*gW=nil;static UIView*gB=nil;static __weak UIWindowScene*gLast=nil;static BOOL gLoop=NO;static UIView*gHosted=nil;
-static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-4.4] %s\\n",m.UTF8String);fclose(x);}}
+static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-4.5] %s\\n",m.UTF8String);fclose(x);}}
 static BOOL CP(UIWindowScene*s){if(!s)return NO;NSString*r=s.session.role?:@"";if([r localizedCaseInsensitiveContainsString:@"CarPlay"])return YES;CGSize z=s.screen.bounds.size;return z.width>z.height&&z.width>=300&&z.height<=500;}
 static UIWindowScene*Find(void){UIWindowScene*best=nil;CGFloat score=-CGFLOAT_MAX;NSString*bid=nil;for(UIScene*r in UIApplication.sharedApplication.connectedScenes){if(![r isKindOfClass:UIWindowScene.class])continue;UIWindowScene*s=(UIWindowScene*)r;if(!CP(s))continue;CGSize z=s.screen.bounds.size;NSString*pid=s.session.persistentIdentifier?:@"";BOOL dash=[pid containsString:@"DBDashboard-Car"]||[pid containsString:@"DBDashboard"];CGFloat hi=-CGFLOAT_MAX;for(UIWindow*w in s.windows)if(w&&!w.hidden&&w.alpha>.01)hi=MAX(hi,w.windowLevel);if(hi==-CGFLOAT_MAX)hi=-10000;CGFloat q=(dash?1e9:0)+(hi>=UIWindowLevelAlert?1e8:0)+z.width*z.height+hi;BOOL tie=fabs(q-score)<.5&&(!bid||[pid compare:bid]==NSOrderedAscending);if(!best||q>score||tie){best=s;score=q;bid=pid;}}if(best!=gLast){gLast=best;if(best)L(@"SELECTED pid=%@ role=%@ size=%@",best.session.persistentIdentifier,best.session.role,NSStringFromCGSize(best.screen.bounds.size));}return best;}
 static UIView*Bubble(CGFloat s){UIView*v=[[UIView alloc]initWithFrame:CGRectMake(8,8,s,s)];v.backgroundColor=UIColor.systemYellowColor;v.layer.cornerRadius=s/2;v.layer.borderWidth=7;v.layer.borderColor=UIColor.systemGreenColor.CGColor;UILabel*l=[[UILabel alloc]initWithFrame:v.bounds];l.text=@"LAB";l.textAlignment=NSTextAlignmentCenter;l.font=[UIFont boldSystemFontOfSize:s*.25];l.textColor=UIColor.blackColor;[v addSubview:l];return v;}
@@ -60,16 +60,20 @@ static void Tick(void){UIWindowScene*s=Find();if(!s){dispatch_after(dispatch_tim
 
 
 
-// 4.4 SAFE: observe DDz2 return objects without invoking builders ourselves.
-// Hook lower-risk hostBundleId wrapper; log returned scene-host object/class/hierarchy.
-static void Obj(id o,NSString*t){if(!o){L(@"4.4 %@ nil",t);return;}L(@"4.4 %@ obj=%p class=%@ desc=%@",t,o,NSStringFromClass([o class]),o);
- unsigned n=0;Ivar*iv=class_copyIvarList([o class],&n);for(unsigned i=0;i<n;i++){const char*ty=ivar_getTypeEncoding(iv[i]);id v=nil;if(ty&&ty[0]=='@')@try{v=object_getIvar(o,iv[i]);}@catch(__unused NSException*e){}L(@"4.4  IVAR %s type=%s value=%@",ivar_getName(iv[i]),ty?:"?",v);}free(iv);}
+
+
+// 4.5 SAFE: hostBundleId wrapper did not fire during split.
+// Observe spikeCreateSlot return instead; do not invoke it ourselves.
+static void O45(id o,NSString*t){if(!o){L(@"4.5 %@ nil",t);return;}L(@"4.5 %@ obj=%p class=%@ desc=%@",t,o,NSStringFromClass([o class]),o);}
 %hook DDz2
--(id)hostBundleId:(id)bid renderSize:(CGSize)sz {
- L(@"4.4 hostBundleId BEGIN bid=%@ size=%@",bid,NSStringFromCGSize(sz));
+-(id)spikeCreateSlot:(id)bid index:(int)idx native:(CGSize)sz {
+ L(@"4.5 SLOT BEGIN bid=%@ index=%d native=%@",bid,idx,NSStringFromCGSize(sz));
  id r=%orig;
- Obj(r,@"hostBundleId RETURN");
+ O45(r,@"SLOT RETURN");
+ @try{
+  if(r){unsigned n=0;Ivar*iv=class_copyIvarList([r class],&n);for(unsigned i=0;i<n;i++){const char*ty=ivar_getTypeEncoding(iv[i]);id v=nil;if(ty&&ty[0]=='@')v=object_getIvar(r,iv[i]);L(@"4.5 IVAR %s type=%s value=%@",ivar_getName(iv[i]),ty?:"?",v);}free(iv);}
+ }@catch(NSException*e){L(@"4.5 INSPECT EXCEPTION %@",e.reason);}
  return r;
 }
 %end
-%ctor { @autoreleasepool { L(@"4.4 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); } }
+%ctor { @autoreleasepool { L(@"4.5 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); } }
