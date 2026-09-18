@@ -1,0 +1,9 @@
+Package: com.talab.testta
+Name: TestTa
+Version: 1.0.0
+Architecture: iphoneos-arm64
+Description: Clean standalone CarPlay bubble visibility baseline.
+Maintainer: sushibta25-design
+Author: sushibta25-design
+Section: Tweaks
+Depends: mobilesubstrate
