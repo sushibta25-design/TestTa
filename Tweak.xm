@@ -16,7 +16,7 @@
 
 static NSString*const P=@"/var/mobile/TestTaLab.txt";
 static TALabWindow*gW=nil;static UIView*gB=nil;static __weak UIWindowScene*gLast=nil;static BOOL gLoop=NO;static UIView*gHosted=nil;
-static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-3.7] %s\\n",m.UTF8String);fclose(x);}}
+static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-3.8] %s\\n",m.UTF8String);fclose(x);}}
 static BOOL CP(UIWindowScene*s){if(!s)return NO;NSString*r=s.session.role?:@"";if([r localizedCaseInsensitiveContainsString:@"CarPlay"])return YES;CGSize z=s.screen.bounds.size;return z.width>z.height&&z.width>=300&&z.height<=500;}
 static UIWindowScene*Find(void){UIWindowScene*best=nil;CGFloat score=-CGFLOAT_MAX;NSString*bid=nil;for(UIScene*r in UIApplication.sharedApplication.connectedScenes){if(![r isKindOfClass:UIWindowScene.class])continue;UIWindowScene*s=(UIWindowScene*)r;if(!CP(s))continue;CGSize z=s.screen.bounds.size;NSString*pid=s.session.persistentIdentifier?:@"";BOOL dash=[pid containsString:@"DBDashboard-Car"]||[pid containsString:@"DBDashboard"];CGFloat hi=-CGFLOAT_MAX;for(UIWindow*w in s.windows)if(w&&!w.hidden&&w.alpha>.01)hi=MAX(hi,w.windowLevel);if(hi==-CGFLOAT_MAX)hi=-10000;CGFloat q=(dash?1e9:0)+(hi>=UIWindowLevelAlert?1e8:0)+z.width*z.height+hi;BOOL tie=fabs(q-score)<.5&&(!bid||[pid compare:bid]==NSOrderedAscending);if(!best||q>score||tie){best=s;score=q;bid=pid;}}if(best!=gLast){gLast=best;if(best)L(@"SELECTED pid=%@ role=%@ size=%@",best.session.persistentIdentifier,best.session.role,NSStringFromCGSize(best.screen.bounds.size));}return best;}
 static UIView*Bubble(CGFloat s){UIView*v=[[UIView alloc]initWithFrame:CGRectMake(8,8,s,s)];v.backgroundColor=UIColor.systemYellowColor;v.layer.cornerRadius=s/2;v.layer.borderWidth=7;v.layer.borderColor=UIColor.systemGreenColor.CGColor;UILabel*l=[[UILabel alloc]initWithFrame:v.bounds];l.text=@"LAB";l.textAlignment=NSTextAlignmentCenter;l.font=[UIFont boldSystemFontOfSize:s*.25];l.textColor=UIColor.blackColor;[v addSubview:l];return v;}
@@ -48,30 +48,19 @@ static void Tick(void){UIWindowScene*s=Find();if(!s){dispatch_after(dispatch_tim
 
 
 
-// 3.7 — arm64e-aware implementation mapping.
-// 3.6 proved DuoDash.dylib ownership, but raw IMPs carry PAC bits; strip/sign-normalize
-// before calculating image offsets. No overlay technique is being retested.
-static uintptr_t StripIMP(IMP p){
-#if defined(__arm64e__)
- return (uintptr_t)ptrauth_strip((void*)p,ptrauth_key_function_pointer);
-#else
- return (uintptr_t)p;
-#endif
-}
-static void DumpDuoPAC(void){
- Class k=NSClassFromString(@"CNABSpringBoardObserver");
- for(NSString*s in @[@"hostSplitL:right:skipEvict:",@"onHostRequest:",@"onHostRequestSplit:"]){
-  Method m=class_getInstanceMethod(k,NSSelectorFromString(s));IMP raw=m?method_getImplementation(m):NULL;
-  uintptr_t clean=StripIMP(raw);Dl_info d={0};
-  if(clean&&dladdr((void*)clean,&d))L(@"PAC METHOD %@ raw=%p clean=%p image=%s base=%p offset=0x%llx",s,raw,(void*)clean,d.dli_fname?:"?",d.dli_fbase,(unsigned long long)(clean-(uintptr_t)d.dli_fbase));
-  else L(@"PAC METHOD %@ raw=%p clean=%p dladdr=FAIL",s,raw,(void*)clean);
- }
-}
+
+
+// 3.8 — trace what DuoDash hostSplit creates/calls, using runtime object delta.
+// Offsets are now known; avoid old overlay/z-order experiments.
+static NSSet *ClassNames(void){int n=objc_getClassList(NULL,0);Class*cs=malloc(sizeof(Class)*n);n=objc_getClassList(cs,n);NSMutableSet*s=[NSMutableSet set];for(int i=0;i<n;i++){NSString*x=NSStringFromClass(cs[i]);if(x)[s addObject:x];}free(cs);return s;}
 %hook CNABSpringBoardObserver
--(void)hostSlots:(id)slots skipEvict:(BOOL)skip {
- static dispatch_once_t once;dispatch_once(&once,^{DumpDuoPAC();});
- L(@"3.7 hostSlots=%@ skip=%d",slots,skip);
+-(void)hostSplitL:(id)l right:(id)r skipEvict:(BOOL)skip {
+ NSSet*before=ClassNames();L(@"3.8 SPLIT BEGIN L=%@ R=%@ skip=%d",l,r,skip);
  %orig;
+ NSSet*after=ClassNames();NSMutableSet*delta=[after mutableCopy];[delta minusSet:before];
+ NSArray*arr=[[delta allObjects] sortedArrayUsingSelector:@selector(compare:)];
+ for(NSString*n in arr)if([n localizedCaseInsensitiveContainsString:@"scene"]||[n localizedCaseInsensitiveContainsString:@"host"]||[n localizedCaseInsensitiveContainsString:@"workspace"]||[n localizedCaseInsensitiveContainsString:@"display"]||[n localizedCaseInsensitiveContainsString:@"context"]||[n localizedCaseInsensitiveContainsString:@"app"])L(@"3.8 NEWCLASS %@",n);
+ L(@"3.8 SPLIT END newClasses=%lu",(unsigned long)delta.count);
 }
 %end
-%ctor { @autoreleasepool { L(@"3.7 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); } }
+%ctor { @autoreleasepool { L(@"3.8 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); } }
