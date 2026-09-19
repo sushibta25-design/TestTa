@@ -74,9 +74,17 @@ static void D47(id d,id bid,int idx){if(!d)return;L(@"4.7 DEVICEVC bid=%@ idx=%d
  unsigned mc=0;Method*ms=class_copyMethodList([d class],&mc);for(unsigned i=0;i<mc;i++){NSString*s=NSStringFromSelector(method_getName(ms[i]));if([s localizedCaseInsensitiveContainsString:@"scene"]||[s localizedCaseInsensitiveContainsString:@"host"]||[s localizedCaseInsensitiveContainsString:@"context"]||[s localizedCaseInsensitiveContainsString:@"display"]||[s localizedCaseInsensitiveContainsString:@"layer"]||[s localizedCaseInsensitiveContainsString:@"content"])L(@"4.7 METHOD %@ types=%s",s,method_getTypeEncoding(ms[i]));}free(ms);}
 %hook DDz2
 -(id)spikeCreateSlot:(id)bid index:(int)idx native:(CGSize)sz {
- id result=%orig;UIView*v=(UIView*)result;id vc=nil;id d=nil;
- @try{vc=[v valueForKey:@"viewDelegate"];d=[vc valueForKey:@"deviceAppViewController"];}@catch(__unused NSException*e){}
- D47(d,bid,idx);return result;
+ id result = %orig;
+ UIView *slotView = (UIView *)result;
+ id delegateObj = nil;
+ id deviceController = nil;
+ @try {
+  delegateObj = [slotView valueForKey:@"viewDelegate"];
+  deviceController = [delegateObj valueForKey:@"deviceAppViewController"];
+ } @catch (__unused NSException *e) {
+ }
+ D47(deviceController,bid,idx);
+ return result;
 }
 %end
 %ctor { @autoreleasepool { L(@"4.7 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); } }
