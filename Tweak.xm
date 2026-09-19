@@ -16,7 +16,7 @@
 
 static NSString*const P=@"/var/mobile/TestTaLab.txt";
 static TALabWindow*gW=nil;static UIView*gB=nil;static __weak UIWindowScene*gLast=nil;static BOOL gLoop=NO;static UIView*gHosted=nil;
-static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-4.7] %s\
+static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-4.8] %s\
 ",m.UTF8String);fclose(x);}}
 static BOOL CP(UIWindowScene*s){if(!s)return NO;NSString*r=s.session.role?:@"";if([r localizedCaseInsensitiveContainsString:@"CarPlay"])return YES;CGSize z=s.screen.bounds.size;return z.width>z.height&&z.width>=300&&z.height<=500;}
 static UIWindowScene*Find(void){UIWindowScene*best=nil;CGFloat score=-CGFLOAT_MAX;NSString*bid=nil;for(UIScene*r in UIApplication.sharedApplication.connectedScenes){if(![r isKindOfClass:UIWindowScene.class])continue;UIWindowScene*s=(UIWindowScene*)r;if(!CP(s))continue;CGSize z=s.screen.bounds.size;NSString*pid=s.session.persistentIdentifier?:@"";BOOL dash=[pid containsString:@"DBDashboard-Car"]||[pid containsString:@"DBDashboard"];CGFloat hi=-CGFLOAT_MAX;for(UIWindow*w in s.windows)if(w&&!w.hidden&&w.alpha>.01)hi=MAX(hi,w.windowLevel);if(hi==-CGFLOAT_MAX)hi=-10000;CGFloat q=(dash?1e9:0)+(hi>=UIWindowLevelAlert?1e8:0)+z.width*z.height+hi;BOOL tie=fabs(q-score)<.5&&(!bid||[pid compare:bid]==NSOrderedAscending);if(!best||q>score||tie){best=s;score=q;bid=pid;}}if(best!=gLast){gLast=best;if(best)L(@"SELECTED pid=%@ role=%@ size=%@",best.session.persistentIdentifier,best.session.role,NSStringFromCGSize(best.screen.bounds.size));}return best;}
@@ -67,24 +67,15 @@ static void Tick(void){UIWindowScene*s=Find();if(!s){dispatch_after(dispatch_tim
 
 
 
-// 4.7 SAFE: inspect SBPriorityDeviceApplicationSceneViewController returned inside SBAppViewController.
-// No changes to scene hosting or z-order.
-static void D47(id d,id bid,int idx){if(!d)return;L(@"4.7 DEVICEVC bid=%@ idx=%d obj=%p class=%@",bid,idx,d,NSStringFromClass([d class]));
- unsigned n=0;Ivar*iv=class_copyIvarList([d class],&n);for(unsigned i=0;i<n;i++){const char*ty=ivar_getTypeEncoding(iv[i]);id v=nil;if(ty&&ty[0]=='@')@try{v=object_getIvar(d,iv[i]);}@catch(__unused NSException*e){}L(@"4.7 IVAR %s type=%s class=%@ value=%@",ivar_getName(iv[i]),ty?:"?",NSStringFromClass([v class]),v);}free(iv);
- unsigned mc=0;Method*ms=class_copyMethodList([d class],&mc);for(unsigned i=0;i<mc;i++){NSString*s=NSStringFromSelector(method_getName(ms[i]));if([s localizedCaseInsensitiveContainsString:@"scene"]||[s localizedCaseInsensitiveContainsString:@"host"]||[s localizedCaseInsensitiveContainsString:@"context"]||[s localizedCaseInsensitiveContainsString:@"display"]||[s localizedCaseInsensitiveContainsString:@"layer"]||[s localizedCaseInsensitiveContainsString:@"content"])L(@"4.7 METHOD %@ types=%s",s,method_getTypeEncoding(ms[i]));}free(ms);}
-%hook DDz2
--(id)spikeCreateSlot:(id)bid index:(int)idx native:(CGSize)sz {
- id result = %orig;
- UIView *slotView = (UIView *)result;
- id delegateObj = nil;
- id deviceController = nil;
- @try {
-  delegateObj = [slotView valueForKey:@"viewDelegate"];
-  deviceController = [delegateObj valueForKey:@"deviceAppViewController"];
- } @catch (__unused NSException *e) {
- }
- D47(deviceController,bid,idx);
- return result;
+
+
+// 4.8 SAFE: observe the presentation priority chosen by SpringBoard's hosted scene VC.
+// 4.7 exposed sceneViewPresentationPriority: as the only relevant method on the priority subclass.
+%hook SBPriorityDeviceApplicationSceneViewController
+-(NSInteger)sceneViewPresentationPriority:(id)view {
+ NSInteger p=%orig;
+ L(@"4.8 PRESENTATION PRIORITY self=%p view=%p class=%@ priority=%ld",self,view,NSStringFromClass([view class]),(long)p);
+ return p;
 }
 %end
-%ctor { @autoreleasepool { L(@"4.7 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); } }
+%ctor { @autoreleasepool { L(@"4.8 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); } }
