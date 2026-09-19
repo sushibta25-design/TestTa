@@ -16,7 +16,7 @@
 
 static NSString*const P=@"/var/mobile/TestTaLab.txt";
 static TALabWindow*gW=nil;static UIView*gB=nil;static __weak UIWindowScene*gLast=nil;static BOOL gLoop=NO;static UIView*gHosted=nil;
-static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-4.9] %s\
+static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-5.0] %s\
 ",m.UTF8String);fclose(x);}}
 static BOOL CP(UIWindowScene*s){if(!s)return NO;NSString*r=s.session.role?:@"";if([r localizedCaseInsensitiveContainsString:@"CarPlay"])return YES;CGSize z=s.screen.bounds.size;return z.width>z.height&&z.width>=300&&z.height<=500;}
 static UIWindowScene*Find(void){UIWindowScene*best=nil;CGFloat score=-CGFLOAT_MAX;NSString*bid=nil;for(UIScene*r in UIApplication.sharedApplication.connectedScenes){if(![r isKindOfClass:UIWindowScene.class])continue;UIWindowScene*s=(UIWindowScene*)r;if(!CP(s))continue;CGSize z=s.screen.bounds.size;NSString*pid=s.session.persistentIdentifier?:@"";BOOL dash=[pid containsString:@"DBDashboard-Car"]||[pid containsString:@"DBDashboard"];CGFloat hi=-CGFLOAT_MAX;for(UIWindow*w in s.windows)if(w&&!w.hidden&&w.alpha>.01)hi=MAX(hi,w.windowLevel);if(hi==-CGFLOAT_MAX)hi=-10000;CGFloat q=(dash?1e9:0)+(hi>=UIWindowLevelAlert?1e8:0)+z.width*z.height+hi;BOOL tie=fabs(q-score)<.5&&(!bid||[pid compare:bid]==NSOrderedAscending);if(!best||q>score||tie){best=s;score=q;bid=pid;}}if(best!=gLast){gLast=best;if(best)L(@"SELECTED pid=%@ role=%@ size=%@",best.session.persistentIdentifier,best.session.role,NSStringFromCGSize(best.screen.bounds.size));}return best;}
@@ -71,17 +71,17 @@ static void Tick(void){UIWindowScene*s=Find();if(!s){dispatch_after(dispatch_tim
 
 
 
-// 4.9 controlled priority experiment.
-// 4.8 established DuoDash hosted app scene views use presentation priority=1.
-// Change ONLY those hosted SBDeviceApplicationSceneView presentations to 0.
-// This tests whether priority controls compositor ordering; no UIWindow/zPosition reuse.
-%hook SBPriorityDeviceApplicationSceneViewController
--(NSInteger)sceneViewPresentationPriority:(id)view {
- NSInteger original=%orig;
- NSString *cn=NSStringFromClass([view class]);
- NSInteger result=[cn containsString:@"SBDeviceApplicationSceneView"] ? 0 : original;
- L(@"4.9 PRIORITY class=%@ original=%ld result=%ld",cn,(long)original,(long)result);
- return result;
+
+
+// 5.0 SAFE: priority branch closed. Inspect SBDeviceApplicationSceneView itself.
+// Read-only: determine its superclass, ivars and presentation/host/context methods.
+static void S50(void){
+ Class k=NSClassFromString(@"SBDeviceApplicationSceneView");if(!k){L(@"5.0 NO CLASS");return;}
+ for(int d=0;k&&d<5;d++,k=class_getSuperclass(k)){
+  L(@"5.0 CLASS depth=%d %@",d,NSStringFromClass(k));
+  unsigned ic=0;Ivar*iv=class_copyIvarList(k,&ic);for(unsigned i=0;i<ic;i++){NSString*n=[NSString stringWithUTF8String:ivar_getName(iv[i])];if([n localizedCaseInsensitiveContainsString:@"scene"]||[n localizedCaseInsensitiveContainsString:@"host"]||[n localizedCaseInsensitiveContainsString:@"context"]||[n localizedCaseInsensitiveContainsString:@"layer"]||[n localizedCaseInsensitiveContainsString:@"display"])L(@"5.0 IVAR %@ type=%s",n,ivar_getTypeEncoding(iv[i]));}free(iv);
+  unsigned mc=0;Method*ms=class_copyMethodList(k,&mc);for(unsigned i=0;i<mc;i++){NSString*s=NSStringFromSelector(method_getName(ms[i]));if([s localizedCaseInsensitiveContainsString:@"scene"]||[s localizedCaseInsensitiveContainsString:@"host"]||[s localizedCaseInsensitiveContainsString:@"context"]||[s localizedCaseInsensitiveContainsString:@"layer"]||[s localizedCaseInsensitiveContainsString:@"display"]||[s localizedCaseInsensitiveContainsString:@"presentation"])L(@"5.0 METHOD %@ types=%s",s,method_getTypeEncoding(ms[i]));}free(ms);
+ }
+ L(@"5.0 END");
 }
-%end
-%ctor { @autoreleasepool { L(@"4.9 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); } }
+%ctor { @autoreleasepool { if([NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.apple.springboard"])dispatch_after(dispatch_time(DISPATCH_TIME_NOW,4*NSEC_PER_SEC),dispatch_get_main_queue(),^{S50();}); } }
