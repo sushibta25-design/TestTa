@@ -86,8 +86,18 @@ static id GetI(id o,const char*n){if(!o)return nil;Ivar iv=class_getInstanceVari
 static void P53(id o,NSString*t){if(!o){L(@"5.3 %@ nil",t);return;}L(@"5.3 %@ obj=%p class=%@ desc=%@",t,o,NSStringFromClass([o class]),o);}
 %hook DDz2
 -(id)spikeCreateSlot:(id)bid index:(int)idx native:(CGSize)sz {
- id result=%orig;UIView*slot=(UIView*)result;UIView*sv=FindSceneView(slot);L(@"5.3 SLOT bid=%@ idx=%d sceneView=%p class=%@",bid,idx,sv,NSStringFromClass(sv.class));
- P53(GetI(sv,"_hostView"),@"hostView");P53(GetI(sv,"_currentHostView"),@"currentHostView");P53(GetI(sv,"_sceneContentContainerView"),@"contentContainer");P53(GetI(sv,"_sceneHandle"),@"sceneHandle");
+ id result = %orig;
+ UIView *slotView = (UIView *)result;
+ UIView *sceneView = FindSceneView(slotView);
+ L(@"5.3 SLOT bid=%@ idx=%d sceneView=%p class=%@",bid,idx,sceneView,NSStringFromClass([sceneView class]));
+ id hostObject = GetI(sceneView,"_hostView");
+ id currentHostObject = GetI(sceneView,"_currentHostView");
+ id contentObject = GetI(sceneView,"_sceneContentContainerView");
+ id sceneHandleObject = GetI(sceneView,"_sceneHandle");
+ P53(hostObject,@"hostView");
+ P53(currentHostObject,@"currentHostView");
+ P53(contentObject,@"contentContainer");
+ P53(sceneHandleObject,@"sceneHandle");
  return result;
 }
 %end
