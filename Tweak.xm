@@ -16,7 +16,7 @@
 
 static NSString*const P=@"/var/mobile/TestTaLab.txt";
 static TALabWindow*gW=nil;static UIView*gB=nil;static __weak UIWindowScene*gLast=nil;static BOOL gLoop=NO;static UIView*gHosted=nil;
-static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-5.2] %s\
+static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-5.3] %s\
 ",m.UTF8String);fclose(x);}}
 static BOOL CP(UIWindowScene*s){if(!s)return NO;NSString*r=s.session.role?:@"";if([r localizedCaseInsensitiveContainsString:@"CarPlay"])return YES;CGSize z=s.screen.bounds.size;return z.width>z.height&&z.width>=300&&z.height<=500;}
 static UIWindowScene*Find(void){UIWindowScene*best=nil;CGFloat score=-CGFLOAT_MAX;NSString*bid=nil;for(UIScene*r in UIApplication.sharedApplication.connectedScenes){if(![r isKindOfClass:UIWindowScene.class])continue;UIWindowScene*s=(UIWindowScene*)r;if(!CP(s))continue;CGSize z=s.screen.bounds.size;NSString*pid=s.session.persistentIdentifier?:@"";BOOL dash=[pid containsString:@"DBDashboard-Car"]||[pid containsString:@"DBDashboard"];CGFloat hi=-CGFLOAT_MAX;for(UIWindow*w in s.windows)if(w&&!w.hidden&&w.alpha>.01)hi=MAX(hi,w.windowLevel);if(hi==-CGFLOAT_MAX)hi=-10000;CGFloat q=(dash?1e9:0)+(hi>=UIWindowLevelAlert?1e8:0)+z.width*z.height+hi;BOOL tie=fabs(q-score)<.5&&(!bid||[pid compare:bid]==NSOrderedAscending);if(!best||q>score||tie){best=s;score=q;bid=pid;}}if(best!=gLast){gLast=best;if(best)L(@"SELECTED pid=%@ role=%@ size=%@",best.session.persistentIdentifier,best.session.role,NSStringFromCGSize(best.screen.bounds.size));}return best;}
@@ -77,34 +77,18 @@ static void Tick(void){UIWindowScene*s=Find();if(!s){dispatch_after(dispatch_tim
 
 
 
-// 5.2 SAFE: inspect live SBSceneView host/presentation objects after DuoDash creates a slot.
-// 5.1 exposed _hostView (UIView<UIScenePresentation>), _currentHostView and _sceneContentContainerView.
-static void O52(id o,NSString*t){if(!o){L(@"5.2 %@ nil",t);return;}L(@"5.2 %@ obj=%p class=%@ frame=%@",t,o,NSStringFromClass([o class]),[o isKindOfClass:UIView.class]?NSStringFromCGRect([(UIView*)o frame]):@"-");
- unsigned mc=0;Method*ms=class_copyMethodList([o class],&mc);for(unsigned i=0;i<mc;i++){NSString*s=NSStringFromSelector(method_getName(ms[i]));if([s localizedCaseInsensitiveContainsString:@"context"]||[s localizedCaseInsensitiveContainsString:@"scene"]||[s localizedCaseInsensitiveContainsString:@"host"]||[s localizedCaseInsensitiveContainsString:@"presentation"]||[s localizedCaseInsensitiveContainsString:@"layer"]||[s localizedCaseInsensitiveContainsString:@"display"])L(@"5.2 %@ METHOD %@ types=%s",t,s,method_getTypeEncoding(ms[i]));}free(ms);}
+
+
+// 5.3 SAFE: 5.2 queried the outer UIView. Find SBDeviceApplicationSceneView recursively,
+// then read the ivars exposed by 5.1 directly via runtime (no KVC guesswork).
+static UIView *FindSceneView(UIView *v){if(!v)return nil;if([v isKindOfClass:NSClassFromString(@"SBDeviceApplicationSceneView")])return v;for(UIView*x in v.subviews){UIView*r=FindSceneView(x);if(r)return r;}return nil;}
+static id GetI(id o,const char*n){if(!o)return nil;Ivar iv=class_getInstanceVariable([o class],n);if(!iv){Class k=class_getSuperclass([o class]);while(k&&!iv){iv=class_getInstanceVariable(k,n);k=class_getSuperclass(k);}}return iv?object_getIvar(o,iv):nil;}
+static void P53(id o,NSString*t){if(!o){L(@"5.3 %@ nil",t);return;}L(@"5.3 %@ obj=%p class=%@ desc=%@",t,o,NSStringFromClass([o class]),o);}
 %hook DDz2
 -(id)spikeCreateSlot:(id)bid index:(int)idx native:(CGSize)sz {
- id result = %orig;
- UIView *slotView = (UIView *)result;
- id delegate = nil;
- id deviceVC = nil;
- id hostView = nil;
- id currentHostView = nil;
- id contentContainer = nil;
- @try {
-  delegate = [slotView valueForKey:@"viewDelegate"];
-  deviceVC = [delegate valueForKey:@"deviceAppViewController"];
-  UIView *deviceView = [deviceVC view];
-  hostView = [deviceView valueForKey:@"hostView"];
-  currentHostView = [deviceView valueForKey:@"currentHostView"];
-  contentContainer = [deviceView valueForKey:@"sceneContentContainerView"];
- } @catch (NSException *e) {
-  L(@"5.2 KVC %@",e.reason);
- }
- L(@"5.2 SLOT bid=%@ idx=%d deviceVC=%@",bid,idx,NSStringFromClass([deviceVC class]));
- O52(hostView,@"hostView");
- O52(currentHostView,@"currentHostView");
- O52(contentContainer,@"contentContainer");
+ id result=%orig;UIView*slot=(UIView*)result;UIView*sv=FindSceneView(slot);L(@"5.3 SLOT bid=%@ idx=%d sceneView=%p class=%@",bid,idx,sv,NSStringFromClass(sv.class));
+ P53(GetI(sv,"_hostView"),@"hostView");P53(GetI(sv,"_currentHostView"),@"currentHostView");P53(GetI(sv,"_sceneContentContainerView"),@"contentContainer");P53(GetI(sv,"_sceneHandle"),@"sceneHandle");
  return result;
 }
 %end
-%ctor { @autoreleasepool { L(@"5.2 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); } }
+%ctor { @autoreleasepool { L(@"5.3 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); } }
