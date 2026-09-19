@@ -83,9 +83,28 @@ static void O52(id o,NSString*t){if(!o){L(@"5.2 %@ nil",t);return;}L(@"5.2 %@ ob
  unsigned mc=0;Method*ms=class_copyMethodList([o class],&mc);for(unsigned i=0;i<mc;i++){NSString*s=NSStringFromSelector(method_getName(ms[i]));if([s localizedCaseInsensitiveContainsString:@"context"]||[s localizedCaseInsensitiveContainsString:@"scene"]||[s localizedCaseInsensitiveContainsString:@"host"]||[s localizedCaseInsensitiveContainsString:@"presentation"]||[s localizedCaseInsensitiveContainsString:@"layer"]||[s localizedCaseInsensitiveContainsString:@"display"])L(@"5.2 %@ METHOD %@ types=%s",t,s,method_getTypeEncoding(ms[i]));}free(ms);}
 %hook DDz2
 -(id)spikeCreateSlot:(id)bid index:(int)idx native:(CGSize)sz {
- id result=%orig;UIView*v=(UIView*)result;id vc=nil;id d=nil;id hv=nil;id chv=nil;id cv=nil;
- @try{vc=[v valueForKey:@"viewDelegate"];d=[vc valueForKey:@"deviceAppViewController"];UIView*dv=[d view];hv=[dv valueForKey:@"hostView"];chv=[dv valueForKey:@"currentHostView"];cv=[dv valueForKey:@"sceneContentContainerView"];}@catch(NSException*e){L(@"5.2 KVC %@",e.reason);}
- L(@"5.2 SLOT bid=%@ idx=%d deviceVC=%@",bid,idx,NSStringFromClass([d class]));O52(hv,@"hostView");O52(chv,@"currentHostView");O52(cv,@"contentContainer");return result;
+ id result = %orig;
+ UIView *slotView = (UIView *)result;
+ id delegate = nil;
+ id deviceVC = nil;
+ id hostView = nil;
+ id currentHostView = nil;
+ id contentContainer = nil;
+ @try {
+  delegate = [slotView valueForKey:@"viewDelegate"];
+  deviceVC = [delegate valueForKey:@"deviceAppViewController"];
+  UIView *deviceView = [deviceVC view];
+  hostView = [deviceView valueForKey:@"hostView"];
+  currentHostView = [deviceView valueForKey:@"currentHostView"];
+  contentContainer = [deviceView valueForKey:@"sceneContentContainerView"];
+ } @catch (NSException *e) {
+  L(@"5.2 KVC %@",e.reason);
+ }
+ L(@"5.2 SLOT bid=%@ idx=%d deviceVC=%@",bid,idx,NSStringFromClass([deviceVC class]));
+ O52(hostView,@"hostView");
+ O52(currentHostView,@"currentHostView");
+ O52(contentContainer,@"contentContainer");
+ return result;
 }
 %end
 %ctor { @autoreleasepool { L(@"5.2 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); } }
