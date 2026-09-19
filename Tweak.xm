@@ -16,7 +16,7 @@
 
 static NSString*const P=@"/var/mobile/TestTaLab.txt";
 static TALabWindow*gW=nil;static UIView*gB=nil;static __weak UIWindowScene*gLast=nil;static BOOL gLoop=NO;static UIView*gHosted=nil;
-static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-5.1] %s\
+static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-5.2] %s\
 ",m.UTF8String);fclose(x);}}
 static BOOL CP(UIWindowScene*s){if(!s)return NO;NSString*r=s.session.role?:@"";if([r localizedCaseInsensitiveContainsString:@"CarPlay"])return YES;CGSize z=s.screen.bounds.size;return z.width>z.height&&z.width>=300&&z.height<=500;}
 static UIWindowScene*Find(void){UIWindowScene*best=nil;CGFloat score=-CGFLOAT_MAX;NSString*bid=nil;for(UIScene*r in UIApplication.sharedApplication.connectedScenes){if(![r isKindOfClass:UIWindowScene.class])continue;UIWindowScene*s=(UIWindowScene*)r;if(!CP(s))continue;CGSize z=s.screen.bounds.size;NSString*pid=s.session.persistentIdentifier?:@"";BOOL dash=[pid containsString:@"DBDashboard-Car"]||[pid containsString:@"DBDashboard"];CGFloat hi=-CGFLOAT_MAX;for(UIWindow*w in s.windows)if(w&&!w.hidden&&w.alpha>.01)hi=MAX(hi,w.windowLevel);if(hi==-CGFLOAT_MAX)hi=-10000;CGFloat q=(dash?1e9:0)+(hi>=UIWindowLevelAlert?1e8:0)+z.width*z.height+hi;BOOL tie=fabs(q-score)<.5&&(!bid||[pid compare:bid]==NSOrderedAscending);if(!best||q>score||tie){best=s;score=q;bid=pid;}}if(best!=gLast){gLast=best;if(best)L(@"SELECTED pid=%@ role=%@ size=%@",best.session.persistentIdentifier,best.session.role,NSStringFromCGSize(best.screen.bounds.size));}return best;}
@@ -75,21 +75,17 @@ static void Tick(void){UIWindowScene*s=Find();if(!s){dispatch_after(dispatch_tim
 
 
 
-// 5.1 SAFE: 5.0 ran in SpringBoard before the private class was available.
-// Trigger metadata inspection only after DDz2 naturally creates a hosted slot in CarPlay.
-static void S51(Class k){
- if(!k){L(@"5.1 NO SBDeviceApplicationSceneView");return;}
- for(int d=0;k&&d<6;d++,k=class_getSuperclass(k)){
-  L(@"5.1 CLASS depth=%d %@",d,NSStringFromClass(k));
-  unsigned ic=0;Ivar*iv=class_copyIvarList(k,&ic);for(unsigned i=0;i<ic;i++){NSString*n=[NSString stringWithUTF8String:ivar_getName(iv[i])];if([n localizedCaseInsensitiveContainsString:@"scene"]||[n localizedCaseInsensitiveContainsString:@"host"]||[n localizedCaseInsensitiveContainsString:@"context"]||[n localizedCaseInsensitiveContainsString:@"layer"]||[n localizedCaseInsensitiveContainsString:@"display"]||[n localizedCaseInsensitiveContainsString:@"presentation"])L(@"5.1 IVAR %@ type=%s",n,ivar_getTypeEncoding(iv[i]));}free(iv);
-  unsigned mc=0;Method*ms=class_copyMethodList(k,&mc);for(unsigned i=0;i<mc;i++){NSString*s=NSStringFromSelector(method_getName(ms[i]));if([s localizedCaseInsensitiveContainsString:@"scene"]||[s localizedCaseInsensitiveContainsString:@"host"]||[s localizedCaseInsensitiveContainsString:@"context"]||[s localizedCaseInsensitiveContainsString:@"layer"]||[s localizedCaseInsensitiveContainsString:@"display"]||[s localizedCaseInsensitiveContainsString:@"presentation"])L(@"5.1 METHOD %@ types=%s",s,method_getTypeEncoding(ms[i]));}free(ms);
- }L(@"5.1 END");
-}
+
+
+// 5.2 SAFE: inspect live SBSceneView host/presentation objects after DuoDash creates a slot.
+// 5.1 exposed _hostView (UIView<UIScenePresentation>), _currentHostView and _sceneContentContainerView.
+static void O52(id o,NSString*t){if(!o){L(@"5.2 %@ nil",t);return;}L(@"5.2 %@ obj=%p class=%@ frame=%@",t,o,NSStringFromClass([o class]),[o isKindOfClass:UIView.class]?NSStringFromCGRect([(UIView*)o frame]):@"-");
+ unsigned mc=0;Method*ms=class_copyMethodList([o class],&mc);for(unsigned i=0;i<mc;i++){NSString*s=NSStringFromSelector(method_getName(ms[i]));if([s localizedCaseInsensitiveContainsString:@"context"]||[s localizedCaseInsensitiveContainsString:@"scene"]||[s localizedCaseInsensitiveContainsString:@"host"]||[s localizedCaseInsensitiveContainsString:@"presentation"]||[s localizedCaseInsensitiveContainsString:@"layer"]||[s localizedCaseInsensitiveContainsString:@"display"])L(@"5.2 %@ METHOD %@ types=%s",t,s,method_getTypeEncoding(ms[i]));}free(ms);}
 %hook DDz2
 -(id)spikeCreateSlot:(id)bid index:(int)idx native:(CGSize)sz {
- id result=%orig;
- static dispatch_once_t once;dispatch_once(&once,^{S51(NSClassFromString(@"SBDeviceApplicationSceneView"));});
- return result;
+ id result=%orig;UIView*v=(UIView*)result;id vc=nil;id d=nil;id hv=nil;id chv=nil;id cv=nil;
+ @try{vc=[v valueForKey:@"viewDelegate"];d=[vc valueForKey:@"deviceAppViewController"];UIView*dv=[d view];hv=[dv valueForKey:@"hostView"];chv=[dv valueForKey:@"currentHostView"];cv=[dv valueForKey:@"sceneContentContainerView"];}@catch(NSException*e){L(@"5.2 KVC %@",e.reason);}
+ L(@"5.2 SLOT bid=%@ idx=%d deviceVC=%@",bid,idx,NSStringFromClass([d class]));O52(hv,@"hostView");O52(chv,@"currentHostView");O52(cv,@"contentContainer");return result;
 }
 %end
-%ctor { @autoreleasepool { L(@"5.1 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); } }
+%ctor { @autoreleasepool { L(@"5.2 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); } }
