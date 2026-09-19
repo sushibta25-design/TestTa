@@ -16,7 +16,7 @@
 
 static NSString*const P=@"/var/mobile/TestTaLab.txt";
 static TALabWindow*gW=nil;static UIView*gB=nil;static __weak UIWindowScene*gLast=nil;static BOOL gLoop=NO;static UIView*gHosted=nil;
-static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-4.8] %s\
+static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-4.9] %s\
 ",m.UTF8String);fclose(x);}}
 static BOOL CP(UIWindowScene*s){if(!s)return NO;NSString*r=s.session.role?:@"";if([r localizedCaseInsensitiveContainsString:@"CarPlay"])return YES;CGSize z=s.screen.bounds.size;return z.width>z.height&&z.width>=300&&z.height<=500;}
 static UIWindowScene*Find(void){UIWindowScene*best=nil;CGFloat score=-CGFLOAT_MAX;NSString*bid=nil;for(UIScene*r in UIApplication.sharedApplication.connectedScenes){if(![r isKindOfClass:UIWindowScene.class])continue;UIWindowScene*s=(UIWindowScene*)r;if(!CP(s))continue;CGSize z=s.screen.bounds.size;NSString*pid=s.session.persistentIdentifier?:@"";BOOL dash=[pid containsString:@"DBDashboard-Car"]||[pid containsString:@"DBDashboard"];CGFloat hi=-CGFLOAT_MAX;for(UIWindow*w in s.windows)if(w&&!w.hidden&&w.alpha>.01)hi=MAX(hi,w.windowLevel);if(hi==-CGFLOAT_MAX)hi=-10000;CGFloat q=(dash?1e9:0)+(hi>=UIWindowLevelAlert?1e8:0)+z.width*z.height+hi;BOOL tie=fabs(q-score)<.5&&(!bid||[pid compare:bid]==NSOrderedAscending);if(!best||q>score||tie){best=s;score=q;bid=pid;}}if(best!=gLast){gLast=best;if(best)L(@"SELECTED pid=%@ role=%@ size=%@",best.session.persistentIdentifier,best.session.role,NSStringFromCGSize(best.screen.bounds.size));}return best;}
@@ -69,13 +69,19 @@ static void Tick(void){UIWindowScene*s=Find();if(!s){dispatch_after(dispatch_tim
 
 
 
-// 4.8 SAFE: observe the presentation priority chosen by SpringBoard's hosted scene VC.
-// 4.7 exposed sceneViewPresentationPriority: as the only relevant method on the priority subclass.
+
+
+// 4.9 controlled priority experiment.
+// 4.8 established DuoDash hosted app scene views use presentation priority=1.
+// Change ONLY those hosted SBDeviceApplicationSceneView presentations to 0.
+// This tests whether priority controls compositor ordering; no UIWindow/zPosition reuse.
 %hook SBPriorityDeviceApplicationSceneViewController
 -(NSInteger)sceneViewPresentationPriority:(id)view {
- NSInteger p=%orig;
- L(@"4.8 PRESENTATION PRIORITY self=%p view=%p class=%@ priority=%ld",self,view,NSStringFromClass([view class]),(long)p);
- return p;
+ NSInteger original=%orig;
+ NSString *cn=NSStringFromClass([view class]);
+ NSInteger result=[cn containsString:@"SBDeviceApplicationSceneView"] ? 0 : original;
+ L(@"4.9 PRIORITY class=%@ original=%ld result=%ld",cn,(long)original,(long)result);
+ return result;
 }
 %end
-%ctor { @autoreleasepool { L(@"4.8 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); } }
+%ctor { @autoreleasepool { L(@"4.9 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); } }
