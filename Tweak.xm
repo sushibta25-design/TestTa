@@ -16,7 +16,7 @@
 
 static NSString*const P=@"/var/mobile/TestTaLab.txt";
 static TALabWindow*gW=nil;static UIView*gB=nil;static __weak UIWindowScene*gLast=nil;static BOOL gLoop=NO;static UIView*gHosted=nil;
-static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-5.3] %s\
+static void L(NSString*f,...){va_list a;va_start(a,f);NSString*m=[[NSString alloc]initWithFormat:f arguments:a];va_end(a);FILE*x=fopen(P.UTF8String,"a");if(x){fprintf(x,"[TESTTA-5.4] %s\
 ",m.UTF8String);fclose(x);}}
 static BOOL CP(UIWindowScene*s){if(!s)return NO;NSString*r=s.session.role?:@"";if([r localizedCaseInsensitiveContainsString:@"CarPlay"])return YES;CGSize z=s.screen.bounds.size;return z.width>z.height&&z.width>=300&&z.height<=500;}
 static UIWindowScene*Find(void){UIWindowScene*best=nil;CGFloat score=-CGFLOAT_MAX;NSString*bid=nil;for(UIScene*r in UIApplication.sharedApplication.connectedScenes){if(![r isKindOfClass:UIWindowScene.class])continue;UIWindowScene*s=(UIWindowScene*)r;if(!CP(s))continue;CGSize z=s.screen.bounds.size;NSString*pid=s.session.persistentIdentifier?:@"";BOOL dash=[pid containsString:@"DBDashboard-Car"]||[pid containsString:@"DBDashboard"];CGFloat hi=-CGFLOAT_MAX;for(UIWindow*w in s.windows)if(w&&!w.hidden&&w.alpha>.01)hi=MAX(hi,w.windowLevel);if(hi==-CGFLOAT_MAX)hi=-10000;CGFloat q=(dash?1e9:0)+(hi>=UIWindowLevelAlert?1e8:0)+z.width*z.height+hi;BOOL tie=fabs(q-score)<.5&&(!bid||[pid compare:bid]==NSOrderedAscending);if(!best||q>score||tie){best=s;score=q;bid=pid;}}if(best!=gLast){gLast=best;if(best)L(@"SELECTED pid=%@ role=%@ size=%@",best.session.persistentIdentifier,best.session.role,NSStringFromCGSize(best.screen.bounds.size));}return best;}
@@ -79,26 +79,20 @@ static void Tick(void){UIWindowScene*s=Find();if(!s){dispatch_after(dispatch_tim
 
 
 
-// 5.3 SAFE: 5.2 queried the outer UIView. Find SBDeviceApplicationSceneView recursively,
-// then read the ivars exposed by 5.1 directly via runtime (no KVC guesswork).
-static UIView *FindSceneView(UIView *v){if(!v)return nil;if([v isKindOfClass:NSClassFromString(@"SBDeviceApplicationSceneView")])return v;for(UIView*x in v.subviews){UIView*r=FindSceneView(x);if(r)return r;}return nil;}
-static id GetI(id o,const char*n){if(!o)return nil;Ivar iv=class_getInstanceVariable([o class],n);if(!iv){Class k=class_getSuperclass([o class]);while(k&&!iv){iv=class_getInstanceVariable(k,n);k=class_getSuperclass(k);}}return iv?object_getIvar(o,iv):nil;}
-static void P53(id o,NSString*t){if(!o){L(@"5.3 %@ nil",t);return;}L(@"5.3 %@ obj=%p class=%@ desc=%@",t,o,NSStringFromClass([o class]),o);}
+
+
+// 5.4 SAFE: 5.3 sampled too early (scenePointer=0, hostView=nil).
+// Keep weak references to created SBDeviceApplicationSceneViews and inspect after scene activation.
+static NSHashTable *g54;
+static id GI54(id o,const char*n){if(!o)return nil;Ivar iv=NULL;for(Class k=[o class];k&&!iv;k=class_getSuperclass(k))iv=class_getInstanceVariable(k,n);return iv?object_getIvar(o,iv):nil;}
+static UIView *FS54(UIView*v){if(!v)return nil;Class c=NSClassFromString(@"SBDeviceApplicationSceneView");if(c&&[v isKindOfClass:c])return v;for(UIView*x in v.subviews){UIView*r=FS54(x);if(r)return r;}return nil;}
+static void Dump54(void){for(id sv in g54){id sh=GI54(sv,"_sceneHandle");id hv=GI54(sv,"_hostView");id ch=GI54(sv,"_currentHostView");id cc=GI54(sv,"_sceneContentContainerView");L(@"5.4 LATE sceneView=%p sceneHandle=%@ host=%p %@ current=%p %@ content=%p %@",sv,sh,hv,NSStringFromClass([hv class]),ch,NSStringFromClass([ch class]),cc,NSStringFromClass([cc class]));} }
 %hook DDz2
 -(id)spikeCreateSlot:(id)bid index:(int)idx native:(CGSize)sz {
  id result = %orig;
- UIView *slotView = (UIView *)result;
- UIView *sceneView = FindSceneView(slotView);
- L(@"5.3 SLOT bid=%@ idx=%d sceneView=%p class=%@",bid,idx,sceneView,NSStringFromClass([sceneView class]));
- id hostObject = GetI(sceneView,"_hostView");
- id currentHostObject = GetI(sceneView,"_currentHostView");
- id contentObject = GetI(sceneView,"_sceneContentContainerView");
- id sceneHandleObject = GetI(sceneView,"_sceneHandle");
- P53(hostObject,@"hostView");
- P53(currentHostObject,@"currentHostView");
- P53(contentObject,@"contentContainer");
- P53(sceneHandleObject,@"sceneHandle");
+ UIView *sceneView = FS54((UIView *)result);
+ if(sceneView){if(!g54)g54=[NSHashTable weakObjectsHashTable];[g54 addObject:sceneView];L(@"5.4 CAPTURE bid=%@ idx=%d sceneView=%p",bid,idx,sceneView);dispatch_after(dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC),dispatch_get_main_queue(),^{Dump54();});}
  return result;
 }
 %end
-%ctor { @autoreleasepool { L(@"5.3 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); } }
+%ctor { @autoreleasepool { L(@"5.4 ACTIVE bundle=%@ process=%@",NSBundle.mainBundle.bundleIdentifier,NSProcessInfo.processInfo.processName); } }
